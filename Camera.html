@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kamera Lokasi</title>
+
+<style>
+body {
+  font-family: Arial;
+  text-align: center;
+  background: #111;
+  color: white;
+}
+
+video, canvas {
+  width: 100%;
+  max-width: 400px;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+button {
+  margin: 5px;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  background: orange;
+  color: white;
+  font-weight: bold;
+}
+
+#info {
+  font-size: 14px;
+  margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2> Kamera + Lokasi</h2>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
+
+<div>
+  <button onclick="startCamera()">Aktifkan Kamera</button>
+  <button onclick="takePhoto()">Ambil Foto</button>
+  <button onclick="shareTelegram()">Share Telegram</button>
+</div>
+
+<div id="info">Menunggu lokasi...</div>
+
+<script>
+let video = document.getElementById('video');
+let canvas = document.getElementById('canvas');
+let ctx = canvas.getContext('2d');
+
+let latitude = '';
+let longitude = '';
+
+function startCamera() {
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      video.srcObject = stream;
+    })
+    .catch(err => {
+      alert("Izin kamera ditolak!");
+    });
+
+  // Ambil lokasi
+  navigator.geolocation.getCurrentPosition(pos => {
+    latitude = pos.coords.latitude;
+    longitude = pos.coords.longitude;
+    document.getElementById("info").innerText =
+      "Lokasi: " + latitude + ", " + longitude;
+  }, err => {
+    document.getElementById("info").innerText = "Gagal ambil lokasi";
+  });
+}
+
+function takePhoto() {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(video, 0, 0);
+
+  let waktu = new Date().toLocaleString();
+
+  // Teks timestamp + lokasi
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Waktu: " + waktu, 10, canvas.height - 40);
+  ctx.fillText("Lat: " + latitude, 10, canvas.height - 25);
+  ctx.fillText("Lng: " + longitude, 10, canvas.height - 10);
+}
+
+function shareTelegram() {
+  let dataUrl = canvas.toDataURL("image/png");
+
+  // Telegram tidak bisa langsung kirim gambar dari base64,
+  // jadi kita buka share text + instruksi
+  let text = "Foto diambil dengan lokasi:\n" +
+             latitude + "," + longitude;
+
+  let url = "https://t.me/share/url?url=&text=" + encodeURIComponent(text);
+
+  window.open(url, "_blank");
+}
+</script>
+
+</body>
+</html>
