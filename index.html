@@ -3,81 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Kamera Lokasi</title>
 
 <style>
 body {
+  margin: 0;
   font-family: Arial;
-  text-align: center;
-  background: #111;
+  background: black;
   color: white;
+  text-align: center;
 }
 
 video, canvas {
   width: 100%;
   max-width: 400px;
-  border-radius: 10px;
+  border-radius: 12px;
   margin-top: 10px;
+}
+
+/* SHUTTER BULAT */
+#shutter {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: white;
+  border: 6px solid #ccc;
+  margin: 20px auto;
 }
 
 button {
   margin: 5px;
-  padding: 10px 15px;
-  border: none;
+  padding: 10px;
   border-radius: 8px;
+  border: none;
   background: orange;
   color: white;
   font-weight: bold;
+  width: 90%;
 }
 
-#info {
-  font-size: 14px;
-  margin-top: 10px;
+#controls {
+  display: block;
+}
+
+#previewControls {
+  display: none;
 }
 </style>
 </head>
 
 <body>
 
-<h2> Kamera + Lokasi</h2>
+<h3>Kamera Lokasi</h3>
 
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas"></canvas>
 
-<div>
+<div id="controls">
+  <div id="shutter" onclick="takePhoto()"></div>
   <button onclick="startCamera()">Aktifkan Kamera</button>
-  <button onclick="takePhoto()">Ambil Foto</button>
-  <button onclick="shareTelegram()">Share Telegram</button>
 </div>
 
-<div id="info">Menunggu lokasi...</div>
+<div id="previewControls">
+  <button onclick="shareTelegram()">Share ke Telegram</button>
+  <button onclick="resetCamera()">Reset</button>
+</div>
 
 <script>
-let video = document.getElementById('video');
-let canvas = document.getElementById('canvas');
-let ctx = canvas.getContext('2d');
+let video = document.getElementById("video");
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
 
-let latitude = '';
-let longitude = '';
+let addressText = "Mengambil lokasi...";
 
-function startCamera() {
-  navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => {
-      video.srcObject = stream;
-    })
-    .catch(err => {
-      alert("Izin kamera ditolak!");
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }
     });
+    video.srcObject = stream;
+  } catch (e) {
+    alert("Izin kamera ditolak!");
+  }
 
-  // Ambil lokasi
-  navigator.geolocation.getCurrentPosition(pos => {
-    latitude = pos.coords.latitude;
-    longitude = pos.coords.longitude;
-    document.getElementById("info").innerText =
-      "Lokasi: " + latitude + ", " + longitude;
-  }, err => {
-    document.getElementById("info").innerText = "Gagal ambil lokasi";
+  // Ambil lokasi + reverse geocode
+  navigator.geolocation.getCurrentPosition(async pos => {
+    let lat = pos.coords.latitude;
+    let lon = pos.coords.longitude;
+
+    try {
+      let res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+      let data = await res.json();
+
+      let jalan = data.address.road || "";
+      let kota = data.address.city || data.address.town || "";
+
+      addressText = jalan + "\n" + kota;
+
+    } catch {
+      addressText = lat + "," + lon;
+    }
   });
+}
+
+function formatTanggal() {
+  const hari = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+  const bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
+  let d = new Date();
+  return `${hari[d.getDay()]}, ${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function takePhoto() {
@@ -86,27 +121,42 @@ function takePhoto() {
 
   ctx.drawImage(video, 0, 0);
 
-  let waktu = new Date().toLocaleString();
+  let tanggal = formatTanggal();
 
-  // Teks timestamp + lokasi
   ctx.fillStyle = "white";
-  ctx.font = "16px Arial";
-  ctx.fillText("Waktu: " + waktu, 10, canvas.height - 40);
-  ctx.fillText("Lat: " + latitude, 10, canvas.height - 25);
-  ctx.fillText("Lng: " + longitude, 10, canvas.height - 10);
+  ctx.font = "18px Arial";
+
+  let y = canvas.height - 60;
+
+  ctx.fillText(tanggal, 10, y);
+  ctx.fillText(addressText.split("\n")[0] || "", 10, y + 20);
+  ctx.fillText(addressText.split("\n")[1] || "", 10, y + 40);
+
+  // pindah ke mode preview
+  video.style.display = "none";
+  document.getElementById("controls").style.display = "none";
+  document.getElementById("previewControls").style.display = "block";
 }
 
 function shareTelegram() {
-  let dataUrl = canvas.toDataURL("image/png");
+  canvas.toBlob(blob => {
+    let file = new File([blob], "foto.png", { type: "image/png" });
 
-  // Telegram tidak bisa langsung kirim gambar dari base64,
-  // jadi kita buka share text + instruksi
-  let text = "Foto diambil dengan lokasi:\n" +
-             latitude + "," + longitude;
+    if (navigator.share) {
+      navigator.share({
+        files: [file],
+        title: "Foto Lokasi"
+      });
+    } else {
+      alert("Browser tidak support share langsung");
+    }
+  });
+}
 
-  let url = "https://t.me/share/url?url=&text=" + encodeURIComponent(text);
-
-  window.open(url, "_blank");
+function resetCamera() {
+  video.style.display = "block";
+  document.getElementById("controls").style.display = "block";
+  document.getElementById("previewControls").style.display = "none";
 }
 </script>
 
