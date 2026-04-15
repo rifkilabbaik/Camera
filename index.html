@@ -25,24 +25,34 @@ video, canvas {
   margin-top: 10px;
 }
 
+/* CONTROL BAR */
+#controlBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 15px;
+}
+
+/* SHUTTER */
 #shutter {
   width: 80px;
   height: 80px;
   border-radius: 50%;
   background: white;
   border: 6px solid #ccc;
-  margin: 15px auto;
 }
 
 button {
-  margin: 5px;
   padding: 10px;
   border-radius: 8px;
   border: none;
   background: orange;
   color: white;
   font-weight: bold;
-  width: 90%;
+}
+
+#preview {
+  display: none;
 }
 </style>
 </head>
@@ -54,14 +64,17 @@ button {
 <video id="video" autoplay playsinline></video>
 <canvas id="canvas"></canvas>
 
-<div id="controls">
-  <button onclick="switchCamera()">Ganti Kamera</button>
+<!-- CONTROL -->
+<div id="controlBar">
+  <button onclick="startCamera()">Aktifkan</button>
+
   <div id="shutter" onclick="takePhoto()"></div>
-  <button onclick="startCamera()">Aktifkan Kamera</button>
+
+  <button onclick="switchCamera()">Ganti</button>
 </div>
 
-<div id="preview" style="display:none;">
-  <button onclick="shareTelegram()">Share ke Telegram</button>
+<div id="preview">
+  <button onclick="shareTelegram()">Share Telegram</button>
   <button onclick="resetCamera()">Reset</button>
 </div>
 
@@ -74,6 +87,7 @@ let currentFacing = "environment";
 let stream;
 let alamatLengkap = "";
 
+// START CAMERA
 async function startCamera() {
   if (stream) stream.getTracks().forEach(t => t.stop());
 
@@ -82,6 +96,14 @@ async function startCamera() {
       video: { facingMode: currentFacing }
     });
     video.srcObject = stream;
+
+    // MIRROR kalau kamera depan
+    if (currentFacing === "user") {
+      video.style.transform = "scaleX(-1)";
+    } else {
+      video.style.transform = "scaleX(1)";
+    }
+
   } catch {
     alert("Izin kamera ditolak");
   }
@@ -89,11 +111,13 @@ async function startCamera() {
   ambilLokasi();
 }
 
+// SWITCH CAMERA
 function switchCamera() {
   currentFacing = currentFacing === "environment" ? "user" : "environment";
   startCamera();
 }
 
+// AMBIL LOKASI
 async function ambilLokasi() {
   navigator.geolocation.getCurrentPosition(async pos => {
     let lat = pos.coords.latitude;
@@ -111,6 +135,7 @@ async function ambilLokasi() {
   });
 }
 
+// FORMAT TANGGAL
 function formatTanggal() {
   const hari = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
   const bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
@@ -119,11 +144,21 @@ function formatTanggal() {
   return `${hari[d.getDay()]}, ${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// FOTO
 function takePhoto() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
+  // MIRROR hasil kalau kamera depan
+  if (currentFacing === "user") {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+
   ctx.drawImage(video, 0, 0);
+
+  // reset transform biar text tidak kebalik
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   ctx.fillStyle = "white";
   ctx.font = "18px Arial";
@@ -138,28 +173,33 @@ function takePhoto() {
   });
 
   video.style.display = "none";
-  document.getElementById("controls").style.display = "none";
+  document.getElementById("controlBar").style.display = "none";
   document.getElementById("preview").style.display = "block";
 }
 
+// SHARE
 function shareTelegram() {
   canvas.toBlob(blob => {
     let a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "foto-lokasi.png";
+    a.download = "foto.png";
     a.click();
 
     window.location.href = "tg://msg";
   });
 }
 
+// RESET (BERSIH LANGSUNG)
 function resetCamera() {
+  canvas.width = 0;
+  canvas.height = 0;
+
   video.style.display = "block";
-  document.getElementById("controls").style.display = "block";
+  document.getElementById("controlBar").style.display = "flex";
   document.getElementById("preview").style.display = "none";
 }
 
-// REGISTER SW
+// PWA
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js');
 }
