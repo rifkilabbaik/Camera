@@ -6,6 +6,9 @@
 
 <title>Kamera Lokasi</title>
 
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+
 <style>
 body {
   margin: 0;
@@ -22,14 +25,13 @@ video, canvas {
   margin-top: 10px;
 }
 
-/* SHUTTER BULAT */
 #shutter {
   width: 80px;
   height: 80px;
   border-radius: 50%;
   background: white;
   border: 6px solid #ccc;
-  margin: 20px auto;
+  margin: 15px auto;
 }
 
 button {
@@ -42,14 +44,6 @@ button {
   font-weight: bold;
   width: 90%;
 }
-
-#controls {
-  display: block;
-}
-
-#previewControls {
-  display: none;
-}
 </style>
 </head>
 
@@ -61,11 +55,12 @@ button {
 <canvas id="canvas"></canvas>
 
 <div id="controls">
+  <button onclick="switchCamera()">Ganti Kamera</button>
   <div id="shutter" onclick="takePhoto()"></div>
   <button onclick="startCamera()">Aktifkan Kamera</button>
 </div>
 
-<div id="previewControls">
+<div id="preview" style="display:none;">
   <button onclick="shareTelegram()">Share ke Telegram</button>
   <button onclick="resetCamera()">Reset</button>
 </div>
@@ -75,35 +70,44 @@ let video = document.getElementById("video");
 let canvas = document.getElementById("canvas");
 let ctx = canvas.getContext("2d");
 
-let addressText = "Mengambil lokasi...";
+let currentFacing = "environment";
+let stream;
+let alamatLengkap = "";
 
 async function startCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: currentFacing }
     });
     video.srcObject = stream;
-  } catch (e) {
-    alert("Izin kamera ditolak!");
+  } catch {
+    alert("Izin kamera ditolak");
   }
 
-  // Ambil lokasi + reverse geocode
+  ambilLokasi();
+}
+
+function switchCamera() {
+  currentFacing = currentFacing === "environment" ? "user" : "environment";
+  startCamera();
+}
+
+async function ambilLokasi() {
   navigator.geolocation.getCurrentPosition(async pos => {
     let lat = pos.coords.latitude;
     let lon = pos.coords.longitude;
 
-    try {
-      let res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-      let data = await res.json();
+    let res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+    let data = await res.json();
+    let a = data.address;
 
-      let jalan = data.address.road || "";
-      let kota = data.address.city || data.address.town || "";
-
-      addressText = jalan + "\n" + kota;
-
-    } catch {
-      addressText = lat + "," + lon;
-    }
+    alamatLengkap =
+      (a.road || "") + "\n" +
+      (a.suburb || a.village || "") + "\n" +
+      (a.city || a.town || "") + "\n" +
+      (a.state || "");
   });
 }
 
@@ -121,42 +125,43 @@ function takePhoto() {
 
   ctx.drawImage(video, 0, 0);
 
-  let tanggal = formatTanggal();
-
   ctx.fillStyle = "white";
   ctx.font = "18px Arial";
 
-  let y = canvas.height - 60;
+  let y = canvas.height - 100;
 
-  ctx.fillText(tanggal, 10, y);
-  ctx.fillText(addressText.split("\n")[0] || "", 10, y + 20);
-  ctx.fillText(addressText.split("\n")[1] || "", 10, y + 40);
+  ctx.fillText(formatTanggal(), 10, y);
 
-  // pindah ke mode preview
+  let lines = alamatLengkap.split("\n");
+  lines.forEach((l, i) => {
+    ctx.fillText(l, 10, y + 20 * (i + 1));
+  });
+
   video.style.display = "none";
   document.getElementById("controls").style.display = "none";
-  document.getElementById("previewControls").style.display = "block";
+  document.getElementById("preview").style.display = "block";
 }
 
 function shareTelegram() {
   canvas.toBlob(blob => {
-    let file = new File([blob], "foto.png", { type: "image/png" });
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "foto-lokasi.png";
+    a.click();
 
-    if (navigator.share) {
-      navigator.share({
-        files: [file],
-        title: "Foto Lokasi"
-      });
-    } else {
-      alert("Browser tidak support share langsung");
-    }
+    window.location.href = "tg://msg";
   });
 }
 
 function resetCamera() {
   video.style.display = "block";
   document.getElementById("controls").style.display = "block";
-  document.getElementById("previewControls").style.display = "none";
+  document.getElementById("preview").style.display = "none";
+}
+
+// REGISTER SW
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js');
 }
 </script>
 
