@@ -3,16 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Kamera Lokasi</title>
-
-<!-- PWA -->
-<link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#000000">
-
-<!-- iOS Support -->
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
 
 <style>
 body {
@@ -23,230 +14,139 @@ body {
   text-align: center;
 }
 
-/* FRAME */
 video, canvas {
   width: 100%;
   max-width: 400px;
-  aspect-ratio: 3/4;
-  object-fit: cover;
   border-radius: 12px;
   margin-top: 10px;
 }
 
-/* CONTROL */
-#controlBar {
-  position: fixed;
-  bottom: 20px;
-  left: 0;
-  right: 0;
-  max-width: 400px;
-  margin: auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-/* SHUTTER */
-#shutter {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: white;
-  border: 6px solid #ccc;
-}
-
-#shutter:active {
-  transform: scale(0.9);
-}
-
 button {
-  padding: 10px;
-  border-radius: 8px;
+  padding: 12px;
+  margin: 5px;
   border: none;
-  background: orange;
-  color: white;
-  font-weight: bold;
+  border-radius: 8px;
+  font-size: 16px;
 }
 
-#preview {
-  display: none;
+.controls {
   margin-top: 10px;
-}
-
-/* INSTALL BUTTON */
-#installBtn {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  display: none;
 }
 </style>
 </head>
 
 <body>
 
-<h3>Kamera Lokasi</h3>
+<h3>Kamera + Lokasi</h3>
 
 <video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
+<canvas id="canvas" style="display:none;"></canvas>
 
-<div id="controlBar">
-  <button onclick="startCamera()">Aktifkan</button>
-  <div id="shutter" onclick="takePhoto()"></div>
-  <button onclick="switchCamera()">Ganti</button>
+<div class="controls">
+  <button onclick="switchCamera()">Switch</button>
+  <button onclick="takePhoto()">📸 Ambil</button>
 </div>
 
-<div id="preview">
+<img id="result" style="width:100%; max-width:400px; display:none; margin-top:10px;"/>
+
+<div class="controls">
+  <button onclick="downloadPhoto()">Download</button>
   <button onclick="shareTelegram()">Share Telegram</button>
-  <button onclick="resetCamera()">Reset</button>
 </div>
-
-<button id="installBtn">Install App</button>
 
 <script>
 let video = document.getElementById("video");
 let canvas = document.getElementById("canvas");
-let ctx = canvas.getContext("2d");
+let result = document.getElementById("result");
 
 let currentFacing = "environment";
 let stream;
-let alamatLengkap = "Mengambil lokasi...";
+let currentLocation = "Mengambil lokasi...";
 
-// CAMERA
+// 🔹 Ambil kamera
 async function startCamera() {
-  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: currentFacing }
+      video: { facingMode: currentFacing },
+      audio: false
     });
     video.srcObject = stream;
-
-    video.style.transform = currentFacing === "user" ? "scaleX(-1)" : "scaleX(1)";
-  } catch {
-    alert("Izin kamera ditolak");
+  } catch (err) {
+    alert("Gagal akses kamera: " + err);
   }
-
-  ambilLokasi();
 }
 
+// 🔹 Switch kamera
 function switchCamera() {
   currentFacing = currentFacing === "environment" ? "user" : "environment";
   startCamera();
 }
 
-// LOKASI
-async function ambilLokasi() {
-  navigator.geolocation.getCurrentPosition(async pos => {
+// 🔹 Ambil lokasi
+navigator.geolocation.getCurrentPosition(
+  pos => {
     let lat = pos.coords.latitude;
     let lon = pos.coords.longitude;
+    currentLocation = `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
+  },
+  err => {
+    currentLocation = "Lokasi tidak diizinkan";
+  }
+);
 
-    try {
-      let res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-      let data = await res.json();
-      let a = data.address || {};
-
-      alamatLengkap =
-        (a.road || "-") + "\n" +
-        "Kel. " + (a.suburb || a.village || "-") + "\n" +
-        "Kec. " + (a.city_district || "-") + "\n" +
-        (a.city || a.town || "-") + "\n" +
-        (a.state || "-");
-
-    } catch {
-      alamatLengkap = "Lokasi gagal";
-    }
-  });
-}
-
-// FORMAT
-function formatTanggalJam() {
-  const hari = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
-  const bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-
-  let d = new Date();
-
-  return {
-    tanggal: `${hari[d.getDay()]}, ${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`,
-    jam: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-  };
-}
-
-// FOTO
+// 🔹 Ambil foto
 function takePhoto() {
+  let ctx = canvas.getContext("2d");
+
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  ctx.setTransform(1,0,0,1,0,0);
-
-  if (currentFacing === "user") {
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-  }
-
   ctx.drawImage(video, 0, 0);
-  ctx.setTransform(1,0,0,1,0,0);
 
-  let t = formatTanggalJam();
+  // Timestamp
+  let time = new Date().toLocaleString();
 
-  let y = canvas.height - 140;
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
 
   ctx.fillStyle = "white";
-  ctx.font = "18px Arial";
+  ctx.font = "16px Arial";
+  ctx.fillText(time, 10, canvas.height - 50);
+  ctx.fillText(currentLocation, 10, canvas.height - 20);
 
-  ctx.fillText(t.tanggal, 10, y);
-  ctx.fillText(t.jam, 10, y + 20);
+  let dataURL = canvas.toDataURL("image/png");
 
-  alamatLengkap.split("\n").forEach((l, i) => {
-    ctx.fillText(l, 10, y + 40 + 20 * i);
-  });
-
-  video.style.display = "none";
-  controlBar.style.display = "none";
-  preview.style.display = "block";
+  result.src = dataURL;
+  result.style.display = "block";
 }
 
-// SHARE
+// 🔹 Download
+function downloadPhoto() {
+  let link = document.createElement("a");
+  link.download = "foto.png";
+  link.href = result.src;
+  link.click();
+}
+
+// 🔹 Share Telegram
 function shareTelegram() {
-  canvas.toBlob(async blob => {
-    let file = new File([blob], "foto-lokasi.png", { type: "image/png" });
+  if (!result.src) {
+    alert("Ambil foto dulu!");
+    return;
+  }
 
-    if (navigator.share && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file] });
-    } else {
-      alert("Tidak support share");
-    }
-  });
+  let url = encodeURIComponent(result.src);
+  let text = encodeURIComponent("Foto dari Kamera Lokasi");
+
+  window.open(`https://t.me/share/url?url=${url}&text=${text}`, "_blank");
 }
 
-// RESET
-function resetCamera() {
-  canvas.width = 0;
-  canvas.height = 0;
-
-  video.style.display = "block";
-  controlBar.style.display = "flex";
-  preview.style.display = "none";
-}
-
-// SERVICE WORKER
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js');
-}
-
-// INSTALL BUTTON
-let deferredPrompt;
-const installBtn = document.getElementById("installBtn");
-
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  installBtn.style.display = "block";
-});
-
-installBtn.onclick = () => {
-  deferredPrompt.prompt();
-};
+// start
+startCamera();
 </script>
 
 </body>
